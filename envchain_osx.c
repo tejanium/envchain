@@ -253,7 +253,7 @@ envchain_search_namespaces(envchain_namespace_search_callback callback, void *da
   if (status == errSecItemNotFound || CFArrayGetCount(items) == 0) {
     return 0;
   }
-  
+
   char** names = malloc(sizeof(char*) * CFArrayGetCount(items));
   if (names == NULL) {
     fprintf(stderr, "malloc fail (names)\n");
@@ -318,7 +318,7 @@ envchain_search_values(const char *name, envchain_search_callback callback, void
     );
     return 1;
   }
-  
+
   envchain_search_values_applier_data context = {callback, NULL, data};
   CFArrayApplyFunction(
     items, CFRangeMake(0, CFArrayGetCount(items)),
@@ -460,4 +460,64 @@ envchain_delete_value(const char *name, const char *key) {
   if (envchain_find_value(name, key, &ref) != 0) {
     SecKeychainItemDelete(ref);
   }
+}
+
+int
+envchain_rename_namespace(const char *current_name, const char *new_name) {
+  OSStatus status;
+  CFStringRef current_service_name_cf = envchain_generate_service_name_cf(current_name);
+  char *new_service_name = envchain_generate_service_name(new_name);
+  CFArrayRef items = NULL;
+
+  const void *query_keys[] = {
+    kSecClass, kSecAttrService,
+    kSecReturnRef, kSecMatchLimit
+  };
+  const void *query_vals[] = {
+    kSecClassGenericPassword, current_service_name_cf,
+    kCFBooleanTrue, kSecMatchLimitAll
+  };
+
+  CFDictionaryRef query = CFDictionaryCreate(kCFAllocatorDefault,
+      query_keys, query_vals, sizeof(query_keys) / sizeof(query_keys[0]),
+      &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+  status = SecItemCopyMatching(query, (CFTypeRef *)&items);
+  if (status != errSecItemNotFound && status != noErr) goto fail;
+
+  if (status == errSecItemNotFound || CFArrayGetCount(items) == 0) {
+    fprintf(stderr,
+      "WARNING: namespace `%s` not defined.\n"
+      "         You can set via running `%s --set %s SOME_ENV_NAME`.\n\n",
+      current_name, envchain_name, current_name
+    );
+    return 1;
+  }
+
+  SecKeychainAttribute attrs[] = {
+    { kSecLabelItemAttr, strlen(new_service_name), new_service_name },
+    { kSecServiceItemAttr, strlen(new_service_name), new_service_name }
+  };
+  SecKeychainAttributeList attributes = { 2, attrs };
+
+  for(int i = 0; i < CFArrayGetCount(items); i++) {
+    SecKeychainItemRef item = (SecKeychainItemRef)CFArrayGetValueAtIndex(items, i);
+
+    SecKeychainItemModifyAttributesAndData(
+      item,
+      &attributes,
+      0, NULL
+    );
+  }
+
+  return 1;
+
+fail:
+  if (items != NULL) CFRelease(items);
+  if (query != NULL) CFRelease(query);
+  if (current_service_name_cf != NULL) CFRelease(current_service_name_cf);
+  if (new_service_name != NULL) CFRelease(new_service_name);
+  if (status != noErr) envchain_fail_osstatus(status);
+
+  return 0;
 }

@@ -298,6 +298,27 @@ envchain_exec(int argc, const char **argv)
   return 0;
 }
 
+/* functions for --rename */
+
+int envchain_rename(int argc, const char **argv)
+{
+  if (argc < 2) envchain_abort_with_help();
+
+  const char *current_name, *new_name;
+
+  current_name = argv[0];
+  new_name = argv[1];
+
+  if (strcmp(current_name, new_name) == 0) envchain_abort_with_help();
+
+  if (envchain_rename_namespace(current_name, new_name) < 0) {
+    fprintf(stderr, "rename failed: %s\n", strerror(errno));
+    return 1;
+  }
+
+  return 0;
+}
+
 /* entry point */
 
 int
@@ -318,6 +339,10 @@ main(int argc, const char **argv)
   else if (strcmp(argv[0], "--unset") == 0) {
     argv++; argc--;
     return envchain_unset(argc, argv);
+  }
+  else if (strcmp(argv[0], "--rename") == 0) {
+    argv++; argc--;
+    return envchain_rename(argc, argv);
   }
   else if (argv[0][0] == '-') {
     fprintf(stderr, "Unknown option %s\n", argv[0]);

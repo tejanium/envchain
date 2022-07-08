@@ -21,4 +21,5 @@ void envchain_save_value(const char *name, const char *key, char *value,
                          int require_passphrase);
 void envchain_delete_value(const char *name, const char *key);
 
+int envchain_rename_namespace(const char *current_name, const char *new_name);
 #endif
